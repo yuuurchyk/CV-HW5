@@ -1,34 +1,62 @@
 import os
+from abc import ABC, abstractmethod
 from typing import Tuple, Dict
 import xml.etree.ElementTree as ET
 
 
+import torch
 from torch.utils.data import Dataset
+from torchvision.io import read_image
 
 
 from cvhw5.utils.env import get_datasets_root
 
 
-def get_wind_to_label() -> Dict[str, int]:
-    base_folder = os.path.join(
-        get_datasets_root(), 'ILSVRC', 'Data', 'CLS-LOC')
+class ImageNet2012(ABC, Dataset):
+    @abstractmethod
+    def __len__(self) -> int:
+        pass
 
-    wnids = set()
+    @abstractmethod
+    def __getitem__(self, idx) -> dict:
+        pass
 
-    for subfolder in ('train', ):
-        for wnid in os.listdir(os.path.join(base_folder, subfolder)):
-            wnid_path = os.path.join(base_folder, subfolder, wnid)
-            assert os.path.isdir(
-                wnid_path), f'Expected {wnid_path} to be a folder'
-            wnids.add(wnid)
+    @abstractmethod
+    def collate_fn(batch):
+        x = []
+        y = []
 
-    wnids = sorted(wnids)
-    wnid_to_label = {wnid: i for i, wnid in enumerate(wnids)}
+        for sx, sy in batch:
+            img = read_image(sx)
 
-    return wnid_to_label
+            x.append(img)
+            y.append(sy)
+
+        y = torch.Tensor(y)
+
+        return x, y
+
+    @staticmethod
+    def _get_wind_to_label() -> Dict[str, int]:
+        base_folder = os.path.join(
+            get_datasets_root(), 'ILSVRC', 'Data', 'CLS-LOC')
+
+        wnids = set()
+
+        for subfolder in ('train', ):
+            for wnid in os.listdir(os.path.join(base_folder, subfolder)):
+                wnid_path = os.path.join(base_folder, subfolder, wnid)
+                assert os.path.isdir(
+                    wnid_path), f'Expected {wnid_path} to be a folder'
+                wnids.add(wnid)
+
+        wnids = sorted(wnids)
+        wnid_to_label = {wnid: i for i, wnid in enumerate(wnids)}
+
+        return wnid_to_label
 
 
-class ImageNet2012TrainSubset(Dataset):
+class ImageNet2012TrainSubset(ImageNet2012):
     SUPPORTED_PERCENTS = (1, 10)
 
     def __init__(self, percent: int) -> None:
@@ -39,7 +67,7 @@ class ImageNet2012TrainSubset(Dataset):
         with open(os.path.join(datasets_root, f'{percent}percent.txt'), 'r') as f:
             images = f.read().splitlines()
 
-        wnid_to_label = get_wind_to_label()
+        wnid_to_label = ImageNet2012._get_wind_to_label()
 
         self.img_paths = []
         self.labels = []
@@ -62,12 +90,12 @@ class ImageNet2012TrainSubset(Dataset):
         return self.img_paths[idx], self.labels[idx]
 
 
-class ImageNet2012Validation(Dataset):
+class ImageNet2012Validation(ImageNet2012):
     def __init__(self) -> None:
         self.img_paths = []
         self.labels = []
 
-        wnid_to_label = get_wind_to_label()
+        wnid_to_label = ImageNet2012._get_wind_to_label()
 
         datasets_root = get_datasets_root()
         annotations_folder = os.path.join(datasets_root, 'ILSVRC', 'Annotations', 'CLS-LOC', 'val')
