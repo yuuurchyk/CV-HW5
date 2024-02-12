@@ -1,2 +1,6 @@
 venv/
-
+cvhw5.egg-info/
+.vscode/
+__pycache__/
+.ipynb_checkpoints/
+.env
