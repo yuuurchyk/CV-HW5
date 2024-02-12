@@ -4,3 +4,4 @@ cvhw5.egg-info/
 __pycache__/
 .ipynb_checkpoints/
 .env
+datasets/
