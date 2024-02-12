@@ -13,6 +13,13 @@ from cvhw5.utils.env import get_datasets_root
 
 
 class ImageNet2012(ABC, Dataset):
+    def __init__(self) -> None:
+        self._wnid_to_label = ImageNet2012._get_wnid_to_label()
+        self._n_classes = len(self._wnid_to_label)
+
+    def n_classes(self) -> None:
+        return self._n_classes
+
     @abstractmethod
     def __len__(self) -> int:
         pass
@@ -21,7 +28,7 @@ class ImageNet2012(ABC, Dataset):
     def __getitem__(self, idx) -> dict:
         pass
 
-    @abstractmethod
+    @staticmethod
     def collate_fn(batch):
         x = []
         y = []
@@ -37,7 +44,7 @@ class ImageNet2012(ABC, Dataset):
         return x, y
 
     @staticmethod
-    def _get_wind_to_label() -> Dict[str, int]:
+    def _get_wnid_to_label() -> Dict[str, int]:
         base_folder = os.path.join(
             get_datasets_root(), 'ILSVRC', 'Data', 'CLS-LOC')
 
@@ -60,6 +67,8 @@ class ImageNet2012TrainSubset(ImageNet2012):
     SUPPORTED_PERCENTS = (1, 10)
 
     def __init__(self, percent: int) -> None:
+        super().__init__()
+
         assert percent in ImageNet2012TrainSubset.SUPPORTED_PERCENTS, f'percent {percent} is not supported. Supported percents are: {ImageNet2012TrainSubset.SUPPORTED_PERCENTS}'
 
         datasets_root = get_datasets_root()
@@ -67,16 +76,14 @@ class ImageNet2012TrainSubset(ImageNet2012):
         with open(os.path.join(datasets_root, f'{percent}percent.txt'), 'r') as f:
             images = f.read().splitlines()
 
-        wnid_to_label = ImageNet2012._get_wind_to_label()
-
         self.img_paths = []
         self.labels = []
 
         for item in images:
             wnid, _ = item.split('_')
 
-            assert wnid in wnid_to_label, f'unexpected wnid: {wnid}'
-            label = wnid_to_label[wnid]
+            assert wnid in self._wnid_to_label, f'unexpected wnid: {wnid}'
+            label = self._wnid_to_label[wnid]
             img_path = os.path.join(
                 datasets_root, 'ILSVRC', 'Data', 'CLS-LOC', 'train', wnid, item)
 
@@ -92,10 +99,10 @@ class ImageNet2012TrainSubset(ImageNet2012):
 
 class ImageNet2012Validation(ImageNet2012):
     def __init__(self) -> None:
+        super().__init__()
+
         self.img_paths = []
         self.labels = []
-
-        wnid_to_label = ImageNet2012._get_wind_to_label()
 
         datasets_root = get_datasets_root()
         annotations_folder = os.path.join(datasets_root, 'ILSVRC', 'Annotations', 'CLS-LOC', 'val')
@@ -106,8 +113,8 @@ class ImageNet2012Validation(ImageNet2012):
             assert annotation_file.lower().endswith('.xml')
 
             wnid = ImageNet2012Validation._parse_xml(os.path.join(annotations_folder, annotation_file))
-            assert wnid in wnid_to_label, f'unexpected wnid: {wnid}'
-            label = wnid_to_label[wnid]
+            assert wnid in self._wnid_to_label, f'unexpected wnid: {wnid}'
+            label = self._wnid_to_label[wnid]
 
             filename, _ = os.path.splitext(annotation_file)
 
