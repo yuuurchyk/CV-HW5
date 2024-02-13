@@ -9,6 +9,6 @@ def get_exp_folder(exp_name: str) -> str:
 
     assert not os.path.exists(exp_path), f'experiment folder {exp_path} already exists!'
 
-    os.makedirs(exp_name)
+    os.makedirs(exp_path)
 
     return exp_path

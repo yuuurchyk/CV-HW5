@@ -1,4 +1,5 @@
 from typing import Tuple
+import logging
 
 import numpy as np
 import torch
@@ -16,7 +17,7 @@ def encode(dataset: Dataset, encoder: nn.Module, batch_size: int, device: torch.
 
     with torch.no_grad():
         for bX, bY in tqdm(dataloader):
-            bX = bX.to(device)
+            bX = bX.float().to(device)
             bX = encoder(bX)
             bX = bX.cpu()
 
@@ -33,7 +34,9 @@ def encode(dataset: Dataset, encoder: nn.Module, batch_size: int, device: torch.
 
 
 def train_and_score(X: np.array, y: np.array) -> float:
-    model = LogisticRegression(solver='lbfgs', penalty=None, verbose=1)
+    logging.info(X.shape)
+
+    model = LogisticRegression(solver='sag', penalty=None, verbose=1, max_iter=3000, n_jobs=-1)
     model.fit(X, y)
 
     predictions = model.predict(X)

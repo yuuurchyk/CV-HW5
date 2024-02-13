@@ -20,23 +20,27 @@ from cvhw5.utils.score import encode, score, train_and_score
 
 EXP_NAME = "exp1"
 EPOCHS_NUM = 1000
-BATCH_SIZE_TRAIN = 128
-BATCH_SIZE_EVAL = 1024
+BATCH_SIZE_TRAIN = 64
+BATCH_SIZE_EVAL = 512
+EMBEDDING_SIZE = 256
 LR = 1e-3
-LR_DECAY = 0.95
+LR_DECAY = 0.75
 LR_DECAY_EPOCHS = 5
 AUGS = []
 
 
 def main():
-    exp_folder = get_exp_folder(EXP_NAME)
-    device = torch.cuda()
-
     set_up_logger()
+
+    exp_folder = get_exp_folder(EXP_NAME)
+
     set_up_logging_to_file(os.path.join(exp_folder, 'exp.log'))
 
+    torch.manual_seed(47)
+    device = torch.device('cuda')
+
     encoder = get_resnet50().to(device)
-    projection = nn.Linear(1000, 128).to(device)
+    projection = nn.Linear(1000, EMBEDDING_SIZE).to(device)
     model = nn.Sequential(encoder, projection)
 
     writer = SummaryWriter(exp_folder)
@@ -45,7 +49,7 @@ def main():
     train_dataset = ImageNet2012TrainSubset(1)
     train_dataset.set_augs(AUGS)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE_TRAIN,
-                              collate_fn=train_dataset.collate_fn, shuffle=True)
+                              collate_fn=train_dataset.collate_fn_contrastive, shuffle=True, pin_memory=True)
 
     validation_dataset = ImageNet2012Validation()
 
@@ -54,17 +58,21 @@ def main():
     validation_eval = ImageNetEvaluation(validation_dataset)
 
     optimizer = Adam(model.parameters(), lr=LR)
-    scheduler = StepLR(optimizer, step_size=LR_DECAY_EPOCHS, gamma=LR_DECAY, verbose=True)
+    scheduler = StepLR(optimizer, step_size=LR_DECAY_EPOCHS, gamma=LR_DECAY)
 
     tick = 0
 
     for epoch in range(1, EPOCHS_NUM + 1):
         logging.info(f'Epoch {epoch}')
 
+        writer.add_scalar('LR', scheduler.get_last_lr()[0], epoch)
+
+        model = model.train()
+
         for batch_X, _ in tqdm(train_loader):
             optimizer.zero_grad()
 
-            batch_X = batch_X.to(device)
+            batch_X = batch_X.float().to(device)
 
             z = model(batch_X)
 
@@ -78,6 +86,8 @@ def main():
             tick += 1
 
         if epoch % LR_DECAY_EPOCHS == 0:
+            model = model.eval()
+
             logging.info(f'Evaluating')
 
             logging.info(f'Form embeddings for the train dataset')
@@ -86,7 +96,9 @@ def main():
             logging.info(f'Form embeddings for the validation dataset')
             vX, vy = encode(validation_eval, model, BATCH_SIZE_EVAL, device)
 
+            logging.info('Training logistic regression')
             eval_model, train_score = train_and_score(tX, ty)
+            logging.info('Evaluating validation accuracy')
             validation_score = score(vX, vy, eval_model)
 
             writer.add_scalars('top1', {

@@ -17,7 +17,8 @@ def get_contrastive_loss(z: torch.Tensor):
     sim_matrix = torch.exp(sim_matrix)
 
     # remove identity similarities
-    sim_matrix = sim_matrix.fill_diagonal_(0.0)
+    mask = torch.eye(2 * N, dtype=torch.bool, device=device)
+    sim_matrix = sim_matrix.masked_fill(mask, 0.0)
     sim_matrix /= torch.sum(sim_matrix, dim=1).view(2 * N, 1)
 
     mask = torch.zeros((2 * N, 2 * N), dtype=torch.bool, device=device)

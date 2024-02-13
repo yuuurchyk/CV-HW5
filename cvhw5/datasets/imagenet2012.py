@@ -35,15 +35,28 @@ class ImageNet2012(ABC, Dataset):
     def __getitem__(self, idx) -> dict:
         pass
 
-    def collate_fn(self, batch):
+    def collate_fn_contrastive(self, batch):
         x = []
         y = []
 
         for sx, sy in batch:
             img = read_image(sx)
-            img = self._aug(img)
 
-            x.append(img)
+            assert img.ndim == 3, f'Get wrong number of dimensions: {img.ndim}'
+
+            channels_num = img.shape[0]
+            assert channels_num in (1, 3), f'Get wrong number of channels: {channels_num}'
+
+            if channels_num == 1:
+                img = img.repeat(3, 1, 1)
+
+            img1 = self._aug(img)
+            img2 = self._aug(img)
+
+            x.append(img1)
+            x.append(img2)
+
+            y.append(sy)
             y.append(sy)
 
         x = torch.stack(x)
@@ -51,7 +64,7 @@ class ImageNet2012(ABC, Dataset):
 
         return x, y
 
-    @staticmethod
+    @ staticmethod
     def _get_wnid_to_label() -> Dict[str, int]:
         base_folder = os.path.join(
             get_datasets_root(), 'ILSVRC', 'Data', 'CLS-LOC')
@@ -132,7 +145,7 @@ class ImageNet2012Validation(ImageNet2012):
             self.img_paths.append(image_file)
             self.labels.append(label)
 
-    @staticmethod
+    @ staticmethod
     def _parse_xml(xml_filepath: str) -> str:
         with open(xml_filepath, 'r') as f:
             content = f.read()
@@ -171,13 +184,21 @@ class ImageNetEvaluation(Dataset):
 
         for x, y in tqdm(input_dataset):
             img = read_image(x)
+            assert img.ndim == 3, f'Get wrong number of dimensions: {img.ndim}'
+
+            channels_num = img.shape[0]
+            assert channels_num in (1, 3), f'Get wrong number of channels: {channels_num}'
+
+            if channels_num == 1:
+                img = img.repeat(3, 1, 1)
+
             img = preprocess(img)
 
             self._x.append(img)
             self._y.append(y)
 
     def __len__(self):
-        pass
+        return len(self._x)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         return self._x[idx], self._y[idx]
