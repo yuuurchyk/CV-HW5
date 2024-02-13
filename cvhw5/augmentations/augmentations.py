@@ -25,16 +25,16 @@ def _get_gaussian_blur() -> v2.Transform:
     return rnd_gaussian_blur
 
 
-def _get_random_resized_crop() -> v2.Transform:
-    return v2.RandomResizedCrop(224)
+def _get_random_resized_crop(random_resized_crop_size: int) -> v2.Transform:
+    return v2.RandomResizedCrop(random_resized_crop_size)
 
 
 def _get_random_horizontal_flip() -> v2.Transform:
     return v2.RandomHorizontalFlip(p=0.5)
 
 
-def get_augmentations(augs: List[str]) -> v2.Transform:
-    transforms = [_get_random_resized_crop()]
+def get_augmentations(augs: List[str], random_resized_crop_size=224) -> v2.Transform:
+    transforms = [_get_random_resized_crop(random_resized_crop_size)]
 
     aug_map = {
         'colordistortion': _get_color_distortion,
