@@ -1,21 +1,28 @@
 import os
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 import xml.etree.ElementTree as ET
 
 
 import torch
 from torch.utils.data import Dataset
 from torchvision.io import read_image
+from torchvision.transforms import v2
+from tqdm import tqdm
 
 
 from cvhw5.utils.env import get_datasets_root
+from cvhw5.augmentations import get_augmentations
 
 
 class ImageNet2012(ABC, Dataset):
     def __init__(self) -> None:
         self._wnid_to_label = ImageNet2012._get_wnid_to_label()
         self._n_classes = len(self._wnid_to_label)
+        self._aug = get_augmentations(augs=[])
+
+    def set_augs(self, augs: List[str]) -> None:
+        self._aug = get_augmentations(augs)
 
     def n_classes(self) -> None:
         return self._n_classes
@@ -28,17 +35,18 @@ class ImageNet2012(ABC, Dataset):
     def __getitem__(self, idx) -> dict:
         pass
 
-    @staticmethod
-    def collate_fn(batch):
+    def collate_fn(self, batch):
         x = []
         y = []
 
         for sx, sy in batch:
             img = read_image(sx)
+            img = self._aug(img)
 
             x.append(img)
             y.append(sy)
 
+        x = torch.stack(x)
         y = torch.Tensor(y)
 
         return x, y
@@ -149,3 +157,27 @@ class ImageNet2012Validation(ImageNet2012):
 
     def __getitem__(self, idx: int) -> Tuple[str, int]:
         return self.img_paths[idx], self.labels[idx]
+
+
+class ImageNetEvaluation(Dataset):
+    def __init__(self, input_dataset: ImageNet2012) -> None:
+        self._x = []
+        self._y = []
+
+        preprocess = v2.Compose([
+            v2.Resize(224, interpolation=v2.InterpolationMode.BICUBIC),
+            v2.CenterCrop(224)
+        ])
+
+        for x, y in tqdm(input_dataset):
+            img = read_image(x)
+            img = preprocess(img)
+
+            self._x.append(img)
+            self._y.append(y)
+
+    def __len__(self):
+        pass
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
+        return self._x[idx], self._y[idx]

@@ -22,11 +22,13 @@ def _get_env() -> SimpleNamespace:
     schema = {
         'type': 'object',
         'properties': {
-            'DATASETS_ROOT': {'type': 'string'}
+            'DATASETS_ROOT': {'type': 'string'},
+            'EXPS_ROOT': {'type': 'string'}
         },
         'additionalProperties': False,
         'required': [
-            'DATASETS_ROOT'
+            'DATASETS_ROOT',
+            'EXPS_ROOT'
         ]
     }
 
@@ -40,6 +42,8 @@ def _get_env() -> SimpleNamespace:
 
     assert os.path.isdir(env.DATASETS_ROOT), '%s from .env file is not a folder' % (
         env.DATASETS_ROOT, )
+    assert os.path.isdir(env.EXPS_ROOT), '%s from .env file is not a folder' % (
+        env.EXPS_ROOT, )
 
     return env
 
@@ -47,3 +51,8 @@ def _get_env() -> SimpleNamespace:
 def get_datasets_root() -> str:
     env = _get_env()
     return env.DATASETS_ROOT
+
+
+def get_exps_root() -> str:
+    env = _get_env()
+    return env.EXPS_ROOT
