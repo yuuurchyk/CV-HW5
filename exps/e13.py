@@ -11,37 +11,41 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 
-from cvhw5.loss import get_contrastive_loss
 from cvhw5.utils.logger import set_up_logger, set_up_logging_to_file
 from cvhw5.utils.exp import get_exp_folder
-from cvhw5.datasets.cifar10 import Cifar10Contrastive
 from cvhw5.augmentations import get_augmentations
+from cvhw5.datasets.cifar10 import Cifar10
 
 
-# contrastive loss of CIFAR10
-EXP_NAME = "exp3"
-EPOCHS_NUM = 1000
-BATCH_SIZE = 128
-EMBEDDING_SIZE = 128
-LR = 1e-4
+# classification on CIFAR10
+EXP_NAME = "exp13"
+EPOCHS_NUM = 500
+BATCH_SIZE = 2048
+LR = 1e-3
 LR_DECAY = 0.85
-LR_DECAY_EPOCHS = 5
-SAVE_MODEL_EPOCHS = 25
-AUGS = []
+LR_DECAY_EPOCHS = 20
+EVALUATION_MODEL_EPOCHS = 10
+SAVE_MODEL_EPOCHS = 50
+AUGS = ['colordistortion', 'gaussianblur', 'horizontalflip']
 
 
-def calc_loss(model, dataloader):
-    loss_sum = 0.0
-    loss_n = 0
+def calc_accuracy(model, dataloader, device):
+    correct = 0
+    total = 0
 
-    for batch_x, _ in tqdm(dataloader):
-        z = model(batch_x)
-        loss = get_contrastive_loss(z)
+    for batch_X, batch_y in tqdm(dataloader):
+        batch_X = batch_X.to(device)
+        batch_y = batch_y.to(device)
 
-        loss_sum += loss.item()
-        loss_n += 1
+        logits = model(batch_X)
+        _, predicted = torch.max(logits, 1)
 
-    return loss_sum / loss_n
+        total += batch_y.size()[0]
+        correct += (predicted == batch_y).sum().item()
+
+    accuracy = correct / total
+
+    return accuracy
 
 
 def main():
@@ -55,7 +59,7 @@ def main():
     device = torch.device('cuda')
 
     encoder = torchvision.models.vgg16_bn()
-    projection = nn.Linear(1000, EMBEDDING_SIZE)
+    projection = nn.Linear(1000, 10)
     model = nn.Sequential(encoder, projection)
     model = model.to(device)
 
@@ -63,14 +67,14 @@ def main():
 
     logging.info('Loading datasets')
 
-    train_dataset = Cifar10Contrastive(True, get_augmentations(AUGS, random_resized_crop_size=32), device)
-    validation_dataset = Cifar10Contrastive(False, get_augmentations(AUGS, random_resized_crop_size=32), device)
+    train_dataset = Cifar10(True, get_augmentations(AUGS, random_resized_crop_size=32), device=torch.device('cpu'))
+    validation_dataset = Cifar10(False, get_augmentations([], random_resized_crop_size=32), device=torch.device('cpu'))
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
-                              collate_fn=train_dataset.collate_fn, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=32, pin_memory=True)
     validation_loader = DataLoader(validation_dataset, batch_size=BATCH_SIZE,
-                                   collate_fn=train_dataset.collate_fn, shuffle=True)
+                                   shuffle=False, num_workers=32, pin_memory=True)
 
+    criterion = nn.CrossEntropyLoss()
     optimizer = Adam(model.parameters(), lr=LR)
     scheduler = StepLR(optimizer, step_size=LR_DECAY_EPOCHS, gamma=LR_DECAY)
 
@@ -83,12 +87,15 @@ def main():
 
         model = model.train()
 
-        for batch_X, _ in tqdm(train_loader):
+        for batch_X, batch_y in tqdm(train_loader):
             optimizer.zero_grad()
 
-            z = model(batch_X)
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
 
-            loss = get_contrastive_loss(z)
+            logits = model(batch_X)
+
+            loss = criterion(logits, batch_y)
 
             writer.add_scalar('train_loss', loss.item(), tick)
 
@@ -97,19 +104,18 @@ def main():
 
             tick += 1
 
-        if epoch % LR_DECAY_EPOCHS == 0:
-            model = model.eval()
-
+        if epoch % EVALUATION_MODEL_EPOCHS == 0:
             with torch.no_grad():
+                model = model.eval()
+
                 logging.info(f'Evaluating train')
-                ltrain = calc_loss(model, train_loader)
-
+                train_accuracy = calc_accuracy(model, train_loader, device)
                 logging.info(f'Evaluating validation')
-                lvalidation = calc_loss(model, validation_loader)
+                validation_accuracy = calc_accuracy(model, validation_loader, device)
 
-                writer.add_scalars('avg_loss', {
-                    'train': ltrain,
-                    'validation': lvalidation
+                writer.add_scalars('accuracy', {
+                    'train': train_accuracy,
+                    'validation': validation_accuracy
                 }, epoch)
 
         if epoch % SAVE_MODEL_EPOCHS == 0:

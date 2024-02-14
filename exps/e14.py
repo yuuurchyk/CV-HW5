@@ -18,23 +18,27 @@ from cvhw5.datasets.cifar10 import Cifar10Contrastive
 from cvhw5.augmentations import get_augmentations
 
 
-# contrastive loss of CIFAR10
-EXP_NAME = "exp3"
-EPOCHS_NUM = 1000
-BATCH_SIZE = 128
+# contrastive loss of CIFAR10, bigger batch, more augmentations
+EXP_NAME = "exp14"
+EPOCHS_NUM = 2500
+BATCH_SIZE = 1024
 EMBEDDING_SIZE = 128
 LR = 1e-4
 LR_DECAY = 0.85
-LR_DECAY_EPOCHS = 5
-SAVE_MODEL_EPOCHS = 25
-AUGS = []
+LR_DECAY_EPOCHS = 100
+PROJECTION_HIDDEN_DIM = 1024
+EVALUATION_MODEL_EPOCHS = 50
+SAVE_MODEL_EPOCHS = 100
+AUGS = ['colordistortion', 'gaussianblur', 'horizontalflip']
 
 
-def calc_loss(model, dataloader):
+def calc_loss(model, dataloader, device):
     loss_sum = 0.0
     loss_n = 0
 
     for batch_x, _ in tqdm(dataloader):
+        batch_x = batch_x.to(device)
+
         z = model(batch_x)
         loss = get_contrastive_loss(z)
 
@@ -55,7 +59,11 @@ def main():
     device = torch.device('cuda')
 
     encoder = torchvision.models.vgg16_bn()
-    projection = nn.Linear(1000, EMBEDDING_SIZE)
+    projection = nn.Sequential(
+        nn.Linear(1000, PROJECTION_HIDDEN_DIM),
+        nn.ReLU(),
+        nn.Linear(PROJECTION_HIDDEN_DIM, EMBEDDING_SIZE)
+    )
     model = nn.Sequential(encoder, projection)
     model = model.to(device)
 
@@ -63,13 +71,15 @@ def main():
 
     logging.info('Loading datasets')
 
-    train_dataset = Cifar10Contrastive(True, get_augmentations(AUGS, random_resized_crop_size=32), device)
-    validation_dataset = Cifar10Contrastive(False, get_augmentations(AUGS, random_resized_crop_size=32), device)
+    train_dataset = Cifar10Contrastive(True, get_augmentations(
+        AUGS, random_resized_crop_size=32), device=torch.device('cpu'))
+    validation_dataset = Cifar10Contrastive(False, get_augmentations(
+        [], random_resized_crop_size=32), device=torch.device('cpu'))
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
-                              collate_fn=train_dataset.collate_fn, shuffle=True)
+                              collate_fn=train_dataset.collate_fn, shuffle=True, drop_last=True, pin_memory=True, num_workers=32)
     validation_loader = DataLoader(validation_dataset, batch_size=BATCH_SIZE,
-                                   collate_fn=train_dataset.collate_fn, shuffle=True)
+                                   collate_fn=train_dataset.collate_fn, shuffle=False, pin_memory=True, num_workers=32)
 
     optimizer = Adam(model.parameters(), lr=LR)
     scheduler = StepLR(optimizer, step_size=LR_DECAY_EPOCHS, gamma=LR_DECAY)
@@ -86,6 +96,8 @@ def main():
         for batch_X, _ in tqdm(train_loader):
             optimizer.zero_grad()
 
+            batch_X = batch_X.to(device)
+
             z = model(batch_X)
 
             loss = get_contrastive_loss(z)
@@ -97,15 +109,15 @@ def main():
 
             tick += 1
 
-        if epoch % LR_DECAY_EPOCHS == 0:
+        if epoch % EVALUATION_MODEL_EPOCHS == 0:
             model = model.eval()
 
             with torch.no_grad():
                 logging.info(f'Evaluating train')
-                ltrain = calc_loss(model, train_loader)
+                ltrain = calc_loss(model, train_loader, device)
 
                 logging.info(f'Evaluating validation')
-                lvalidation = calc_loss(model, validation_loader)
+                lvalidation = calc_loss(model, validation_loader, device)
 
                 writer.add_scalars('avg_loss', {
                     'train': ltrain,

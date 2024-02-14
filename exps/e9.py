@@ -18,16 +18,18 @@ from cvhw5.datasets.cifar10 import Cifar10Contrastive
 from cvhw5.augmentations import get_augmentations
 
 
-# contrastive loss of CIFAR10
-EXP_NAME = "exp3"
+# contrastive loss of CIFAR10, 2layer MLP projection head,
+# other config is from e5
+EXP_NAME = "exp9"
 EPOCHS_NUM = 1000
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 EMBEDDING_SIZE = 128
 LR = 1e-4
 LR_DECAY = 0.85
-LR_DECAY_EPOCHS = 5
+LR_DECAY_EPOCHS = 20
 SAVE_MODEL_EPOCHS = 25
-AUGS = []
+AUGS = ['horizontalflip', 'colordistortion']
+PROJECTION_HIDDEN_DIM = 1024
 
 
 def calc_loss(model, dataloader):
@@ -55,7 +57,11 @@ def main():
     device = torch.device('cuda')
 
     encoder = torchvision.models.vgg16_bn()
-    projection = nn.Linear(1000, EMBEDDING_SIZE)
+    projection = nn.Sequential(
+        nn.Linear(1000, PROJECTION_HIDDEN_DIM),
+        nn.ReLU(),
+        nn.Linear(PROJECTION_HIDDEN_DIM, EMBEDDING_SIZE)
+    )
     model = nn.Sequential(encoder, projection)
     model = model.to(device)
 
@@ -67,7 +73,7 @@ def main():
     validation_dataset = Cifar10Contrastive(False, get_augmentations(AUGS, random_resized_crop_size=32), device)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
-                              collate_fn=train_dataset.collate_fn, shuffle=True)
+                              collate_fn=train_dataset.collate_fn, shuffle=True, drop_last=True)
     validation_loader = DataLoader(validation_dataset, batch_size=BATCH_SIZE,
                                    collate_fn=train_dataset.collate_fn, shuffle=True)
 

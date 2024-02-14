@@ -18,9 +18,9 @@ def _get_color_distortion(s=1.0) -> v2.Transform:
 
 
 def _get_gaussian_blur() -> v2.Transform:
-    gaussian_blur = v2.GaussianBlur(22, (0.1, 2.0))
+    gaussian_blur = v2.GaussianBlur(3, (0.1, 2.0))
 
-    rnd_gaussian_blur = v2.RandomApply(gaussian_blur, p=0.5)
+    rnd_gaussian_blur = v2.RandomApply([gaussian_blur], p=0.5)
 
     return rnd_gaussian_blur
 

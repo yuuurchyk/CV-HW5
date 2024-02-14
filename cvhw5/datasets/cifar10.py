@@ -29,7 +29,10 @@ class Cifar10(Dataset):
         return len(self._x)
 
     def __getitem__(self, idx):
-        return self._transform(self._x[idx]), self._y[idx]
+        x = self._x[idx]
+        y = self._y[idx]
+
+        return x if self._transform is None else self._transform(x), y
 
 
 class Cifar10Contrastive(Dataset):

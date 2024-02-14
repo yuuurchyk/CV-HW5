@@ -1,5 +1,5 @@
 import torch
-import torch.nn.functional as F
+from torchmetrics.functional import pairwise_cosine_similarity
 
 
 def get_contrastive_loss(z: torch.Tensor):
@@ -12,8 +12,7 @@ def get_contrastive_loss(z: torch.Tensor):
     assert z.shape[0] % 2 == 0
     N = z.shape[0] // 2
 
-    z = F.normalize(z, dim=1)
-    sim_matrix = torch.mm(z, z.T)
+    sim_matrix = pairwise_cosine_similarity(z)
     sim_matrix = torch.exp(sim_matrix)
 
     # remove identity similarities
